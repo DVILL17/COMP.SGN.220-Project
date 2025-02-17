@@ -68,10 +68,6 @@ class MyDataset(Dataset):
         :type max_bands: int
         """
         super().__init__()
-        # self.audio_file_paths = []
-        # self.midi_file_paths = []
-        # self.durations = []
-
         self.meta_df = pd.read_csv(meta_csv_file_path)
         self.split_meta_df = self.meta_df[self.meta_df['split'] == split]
 
