@@ -79,16 +79,6 @@ class MyDataset(Dataset):
         self.midi_file_paths = [os.path.join(audio_dir_path, row['midi_filename']) for _, row in self.split_meta_df.iterrows()]
         self.durations = self.split_meta_df['duration'].tolist()
 
-        # Iterate over each row in the metadata to access audio and MIDI files
-        # for index, row in self.split_meta_df.iterrows():
-        #     audio_file = audio_dir_path + '/' + row['audio_filename']
-        #     midi_file = audio_dir_path + '/' + row['midi_filename']
-        #     duration = float(row['duration'])
-
-        #     self.audio_file_paths.append(audio_file)
-        #     self.midi_file_paths.append(midi_file)
-        #     self.durations.append(duration)
-
         self.sr = sr
         self.window_size = window_size
         self.n_fft = n_fft
