@@ -4,13 +4,15 @@
 from typing import Tuple, Optional, Union, List
 from pathlib import Path
 import random
+import os
 
 from torch.utils.data import Dataset
 import numpy as np
 import pandas as pd
 import librosa
+import pretty_midi
 
-import data_augmentation_daniel_villagran as data_augmentation
+import data_augmentation as data_augmentation
 import utils
 
 
@@ -23,15 +25,14 @@ class MyDataset(Dataset):
     def __init__(self,
                  audio_dir_path: Union[str, Path],
                  meta_csv_file_path: Union[str, Path],
-                 labels: List[str],
+                 split: str = 'train',
                  sr: float = 44100,
+                 window_size: int = 5,
                  n_fft: int = 1024,
                  hop_length: int = 512,
                  n_mels: int = 64,
                  pitch_shift_augmentation: bool = False,
                  pitch_shift_max_steps: float = 2.0,
-                 reverb_augmentation: bool = False,
-                 impulses_dir_path: Optional[Union[str, Path]] = None,
                  noise_augmentation: bool = False,
                  snr_db: float = 10.0,
                  freqmask_augmentation: bool = False,
@@ -39,12 +40,12 @@ class MyDataset(Dataset):
             -> None:
         """An example of an object of class torch.utils.data.Dataset
 
-        :param audio_dir_path: Directory with the wav files.
+        :param audio_dir_path: Directory with the dataset.
         :type audio_dir_path: str|pathlib.Path
         :param meta_csv_file_path: Path to the csv file with the metadata.
         :type meta_csv_file_path: str|pathlib.Path
-        :param labels: List of labels.
-        :type labels: list[str]
+        :param split: Data split to use.
+        :type split: str
         :param sr: Sampling rate.
         :type sr: float
         :param n_fft: Number of FFT points.
@@ -57,10 +58,6 @@ class MyDataset(Dataset):
         :type pitch_shift_augmentation: bool
         :param pitch_shift_max_steps: Maximum pitch shift in steps.
         :type pitch_shift_max_steps: float
-        :param reverb_augmentation: Apply reverb augmentation?
-        :type reverb_augmentation: bool
-        :param impulses_dir_path: Directory with the RIR files.
-        :type impulses_dir_path: str|pathlib.Path
         :param noise_augmentation: Apply noise augmentation?
         :type noise_augmentation: bool
         :param snr_db: Signal-to-noise ratio in dB for the noise augmentation.
@@ -71,20 +68,33 @@ class MyDataset(Dataset):
         :type max_bands: int
         """
         super().__init__()
-        self.audio_file_paths = sorted(Path(audio_dir_path).glob('*.wav'))
+        # self.audio_file_paths = []
+        # self.midi_file_paths = []
+        # self.durations = []
+
         self.meta_df = pd.read_csv(meta_csv_file_path)
-        self.labels = labels
+        self.split_meta_df = self.meta_df[self.meta_df['split'] == split]
+
+        self.audio_file_paths = [os.path.join(audio_dir_path, row['audio_filename']) for _, row in self.split_meta_df.iterrows()]
+        self.midi_file_paths = [os.path.join(audio_dir_path, row['midi_filename']) for _, row in self.split_meta_df.iterrows()]
+        self.durations = self.split_meta_df['duration'].tolist()
+
+        # Iterate over each row in the metadata to access audio and MIDI files
+        # for index, row in self.split_meta_df.iterrows():
+        #     audio_file = audio_dir_path + '/' + row['audio_filename']
+        #     midi_file = audio_dir_path + '/' + row['midi_filename']
+        #     duration = float(row['duration'])
+
+        #     self.audio_file_paths.append(audio_file)
+        #     self.midi_file_paths.append(midi_file)
+        #     self.durations.append(duration)
 
         self.sr = sr
+        self.window_size = window_size
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.n_mels = n_mels
 
-        self.reverb_augmentation = reverb_augmentation
-        if reverb_augmentation:
-            assert impulses_dir_path is not None, 'rir_dir_path must be provided if reverb_augmentation is True'
-            impulse_files_paths = sorted(Path(impulses_dir_path).glob('*.wav'))
-            self.impulses = [librosa.load(path, sr=sr)[0] for path in impulse_files_paths]
         self.noise_augmentation = noise_augmentation
         self.snr_db = snr_db
         self.pitch_shift_augmentation = pitch_shift_augmentation
@@ -111,40 +121,57 @@ class MyDataset(Dataset):
         :return: Features and class of the item.
         :rtype: (numpy.ndarray, numpy.ndarray)
         """
-
         # Read the audio file using get_audio_file_data function
         audio_path = self.audio_file_paths[item]
         y, sr = librosa.load(audio_path, sr=self.sr)
         assert sr == self.sr, f'Sampling rate mismatch: {sr} != {self.sr}'
-        y_len = len(y)
-        y_type = y.dtype
 
-        # Apply time domain augmentations
-        if self.pitch_shift_augmentation:
-            n_steps = np.random.uniform(-self.pitch_shift_max_steps, self.pitch_shift_max_steps)
-            y = data_augmentation.add_pitch_shift(y, n_steps, sr)
-        if self.reverb_augmentation:
-            impulse_response = random.choice(self.impulses)
-            y = data_augmentation.add_impulse_response(y, impulse_response)
-        if self.noise_augmentation:
-            y = data_augmentation.add_noise(y, self.snr_db)
+        window_length = int(self.sr * self.window_size)
+        num_windows = max(1, len(y) // window_length)
+        if len(y) < window_length:
+            y = np.pad(y, (0, window_length - len(y)))
 
-        # make sure y is of the original length and type
-        y = y[:y_len].astype(y_type)
+        audio_windows = [y[i * window_length:(i + 1) * window_length] for i in range(num_windows)]
 
-        # Extract mel band energies
-        mels = utils.extract_mel_band_energies(y, sr=sr, n_fft=self.n_fft, hop_length=self.hop_length, n_mels=self.n_mels)
+        for i in range(len(audio_windows)):
+            y_len = len(audio_windows[i])
+            y_type = audio_windows[i].dtype
+
+            # Apply time domain augmentations
+            if self.pitch_shift_augmentation:
+                n_steps = np.random.uniform(-self.pitch_shift_max_steps, self.pitch_shift_max_steps)
+                audio_windows[i] = data_augmentation.add_pitch_shift(audio_windows[i], n_steps, sr)
+            if self.noise_augmentation:
+                audio_windows[i] = data_augmentation.add_noise(audio_windows[i], self.snr_db)
+
+            # make sure y is of the original length and type
+            y = y[:y_len].astype(y_type)
+
+        mel_windows = [utils.extract_mel_band_energies(win, sr=sr, n_fft=self.n_fft, hop_length=self.hop_length, n_mels=self.n_mels) for win in audio_windows]
+        mel_windows = np.stack(mel_windows)  # Shape: (num_windows, n_mels, time_frames)
 
         # Apply frequency domain augmentations
-        if self.freqmask_augmentation:
-            mels = data_augmentation.freq_masking(mels, self.max_bands)
+        for i in range(len(mel_windows)):
+            if self.freqmask_augmentation:
+                mel_windows[i] = data_augmentation.freq_masking(mel_windows[i], self.max_bands)
+        # print(mel_windows.shape)
 
-        # Get the label from the dataframe
-        audio = str(audio_path)
-        label = self.meta_df[self.meta_df['filename'] == audio[audio.rfind('\\')+1:]]['label'].item()
-        # Encode the label using one hot encoding
-        cls_vector = utils.create_one_hot_encoding(label, self.labels)
+        # Load MIDI and create piano roll
+        midi_data = pretty_midi.PrettyMIDI(self.midi_file_paths[item])
+        full_piano_roll = midi_data.get_piano_roll(fs=sr / self.hop_length)  # Full song piano roll
 
-        return mels, cls_vector
+        # Split the full piano roll into windows
+        frames_per_window = mel_windows.shape[2]  # Time frames per mel window
+        piano_roll_windows = [full_piano_roll[:, i * frames_per_window:(i + 1) * frames_per_window] for i in range(num_windows)]
+
+        # Pad piano roll windows if needed
+        for i in range(len(piano_roll_windows)):
+            if piano_roll_windows[i].shape[1] < frames_per_window:
+                piano_roll_windows[i] = np.pad(piano_roll_windows[i], ((0, 0), (0, frames_per_window - piano_roll_windows[i].shape[1])))
+
+        piano_roll_windows = np.stack(piano_roll_windows)  # Shape: (num_windows, 128, time_frames)
+        # print(piano_roll_windows.shape)
+
+        return mel_windows, piano_roll_windows
 
 # EOF

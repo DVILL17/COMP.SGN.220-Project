@@ -4,6 +4,7 @@
 from typing import List, Union
 import os
 import pathlib
+from pathlib import Path
 import itertools
 import numpy as np
 import matplotlib.pyplot as plt
@@ -147,6 +148,33 @@ def plot_confusion_matrix(cm, classes, normalize=False, title='Confusion matrix'
     plt.tight_layout()
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
+
+
+def get_audio_files_from_subdirs(dir_name: Union[str, pathlib.Path]) \
+        -> List[pathlib.Path]:
+    """Returns the audio files in the subdirectories of `dir_name`.
+
+    :param dir_name: The name of the directory.
+    :type dir_name: str
+    :return: The filenames of the audio files in the subdirectories `dir_name`.
+    :rtype: list[pathlib.Path]
+    """
+    return [Path(dirpath) / Path(filename) for dirpath, _, filenames in os.walk(dir_name)
+                                           for filename in filenames
+                                           if filename[-4:] == '.wav']
+
+def get_midi_files_from_subdirs(dir_name: Union[str, pathlib.Path]) \
+        -> List[pathlib.Path]:
+    """Returns the audio files in the subdirectories of `dir_name`.
+
+    :param dir_name: The name of the directory.
+    :type dir_name: str
+    :return: The filenames of the audio files in the subdirectories `dir_name`.
+    :rtype: list[pathlib.Path]
+    """
+    return [Path(dirpath) / Path(filename) for dirpath, _, filenames in os.walk(dir_name)
+                                           for filename in filenames
+                                           if filename[-5:] == '.midi']
 
 
 # EOF

@@ -7,8 +7,8 @@ import utils
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
-from my_cnn_system import MyCNNSystem
-from dataset_class_daniel_villagran import MyDataset
+from cnn_system import MyCNNSystem
+from dataset_class import MyDataset
 from copy import deepcopy
 from sklearn.metrics import confusion_matrix
 import seaborn as sns
@@ -19,7 +19,7 @@ def main():
     print(f'Process on {device}', end='\n\n')
 
     # Define hyper-parameters to be used.
-    batch_size = 4
+    batch_size = 1
     epochs = 30
     learning_rate = 1e-4
 
@@ -64,28 +64,26 @@ def main():
     model = model.to(device)
 
     # Load data
-    data_path = 'esc10_dataset'
+    data_path = 'maestro-v3.0.0'
     
     ds_train = MyDataset(
-        data_path + '/training',
-        data_path + '/train_meta.csv',
-        ['rain', 'sea_waves', 'chainsaw', 'helicopter'],
+        data_path,
+        data_path + '/maestro-v3.0.0.csv',
+        'train',
         # pitch_shift_augmentation=True,
-        # reverb_augmentation=True,
-        # impulses_dir_path='impulse_responses',
         noise_augmentation=True,
         freqmask_augmentation=True,
         max_bands=40
     )
     ds_val = MyDataset(
-        data_path + '/validation',
-        data_path + '/val_meta.csv',
-        ['rain', 'sea_waves', 'chainsaw', 'helicopter']
+        data_path,
+        data_path + '/maestro-v3.0.0.csv',
+        'validation'
     )
     ds_test = MyDataset(
-        data_path + '/testing',
-        data_path + '/test_meta.csv',
-        ['rain', 'sea_waves', 'chainsaw', 'helicopter']
+        data_path,
+        data_path + '/maestro-v3.0.0.csv',
+        'test'
     )
 
     train_loader = DataLoader(ds_train, batch_size=batch_size, shuffle=True)
@@ -93,7 +91,7 @@ def main():
     test_loader = DataLoader(ds_test, batch_size=batch_size)
             
     
-    loss_function = nn.CrossEntropyLoss()
+    loss_function = nn.BCEWithLogitsLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     # Variables for the early stopping

@@ -19,10 +19,10 @@ def add_pitch_shift(y: np.ndarray, n_steps: float, sr: int = 44100) -> np.ndarra
     return y_shift
 
 
-def add_impulse_response(y: np.ndarray, impulse_response: np.ndarray, mixing_alpha: float = 0.7) -> np.ndarray:
-    # Simulate a sound being played in a different environment
-    y_impulse = mixing_alpha*np.convolve(y, impulse_response, 'full')
-    return y_impulse
+# def add_impulse_response(y: np.ndarray, impulse_response: np.ndarray, mixing_alpha: float = 0.7) -> np.ndarray:
+#     # Simulate a sound being played in a different environment
+#     y_impulse = mixing_alpha*np.convolve(y, impulse_response, 'full')
+#     return y_impulse
 
 
 def freq_masking(y: np.ndarray, max_bands: Optional[int] = None):
