@@ -88,7 +88,8 @@ class MyCNNSystem(Module):
         # We'll perform a average pooling along the time axis, so W_out_pool_2 dissapears
         num_el_out = int(H_out_pool_2 * cnn_channels_out_2)
 
-        self.classifier = Linear(num_el_out, output_classes)
+        self.classifier = Linear(num_el_out, 55168)
+
 
     def forward(self,
                 x: Tensor) \
@@ -125,8 +126,7 @@ def main():
     d_time = 646
     d_feature = 40
     x = torch.rand(batch_size, d_time, d_feature)
-    y = torch.rand(batch_size, 1)
-
+    y = torch.rand(batch_size, 55168)
     # Instantiate our CNN
     # ..................
 
