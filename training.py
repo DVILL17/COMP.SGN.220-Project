@@ -64,7 +64,7 @@ def main():
     model = model.to(device)
 
     # Load data
-    data_path = '/mnt/d/maestro-v3.0.0'
+    data_path = 'maestro-v3.0.0'
     
     ds_train = MyDataset(
         data_path,
@@ -161,6 +161,9 @@ def main():
                 y_hat = model(x_val).squeeze(1)
                 val_pred.extend(torch.argmax(y_hat, dim=1).cpu().numpy())
 
+                # Flatten the target to match the shape of the model's output.
+                y_val = y_val.view(1, -1)
+
                 # Calculate the loss.
                 loss = loss_function(y_hat, y_val)
 
@@ -215,6 +218,9 @@ def main():
                         y_hat = model(x_test).squeeze(1)
                         pred_batch = torch.argmax(y_hat, dim=1).cpu().numpy()
                         pred.extend(pred_batch)
+
+                        # Flatten the target to match the shape of the model's output.
+                        y_test = y_test.view(1, -1)
 
                         loss = loss_function(y_hat, y_test)
 

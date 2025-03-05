@@ -35,13 +35,13 @@ class MyDataset(Dataset):
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.n_mels = n_mels
-        self.max_duration = 45.1  # Set the maximum duration
+        self.max_duration = max_duration if max_duration is not None else 45.1  # Set the maximum duration
 
     def __len__(self) -> int:
         return len(self.audio_file_paths)
 
     def __getitem__(self, item: int) -> Tuple[np.ndarray, np.ndarray]:
-    # Load audio
+        # Load audio
         audio_path = self.audio_file_paths[item]
         y, sr = librosa.load(audio_path, sr=self.sr)
         assert sr == self.sr, f'Sampling rate mismatch: {sr} != {self.sr}'
