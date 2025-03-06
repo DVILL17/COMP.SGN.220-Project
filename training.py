@@ -12,6 +12,7 @@ from dataset_class import MyDataset
 from copy import deepcopy
 from sklearn.metrics import confusion_matrix
 import seaborn as sns
+from tqdm import tqdm  
 
 
 def main():
@@ -64,7 +65,7 @@ def main():
     model = model.to(device)
 
     # Load data
-    data_path = 'maestro-v3.0.0'
+    data_path = '/mnt/d/maestro-v3.0.0'
     
     ds_train = MyDataset(
         data_path,
@@ -110,8 +111,8 @@ def main():
         val_pred = []
         val_gt = []
 
-        # Training loop
-        for i, batch in enumerate(train_loader):
+        # Training loop with tqdm
+        for i, batch in enumerate(tqdm(train_loader, desc=f"Training Epoch {epoch+1}/{epochs}", ncols=100)):
             # Zero the gradient of the optimizer.
             optimizer.zero_grad()
 
@@ -148,8 +149,8 @@ def main():
 
         model.eval()
         with torch.no_grad():
-            # Validation loop
-            for i, batch in enumerate(val_loader):
+            # Validation loop with tqdm
+            for i, batch in enumerate(tqdm(val_loader, desc=f"Validating Epoch {epoch+1}/{epochs}", ncols=100)):
                 # Get the batch
                 x_val, y_val = batch
                 # Pass the data to the appropriate device.
@@ -175,7 +176,7 @@ def main():
         epoch_loss_training = np.mean(epoch_loss_training)
         epoch_loss_validation = np.mean(epoch_loss_validation)
         epoch_acc_training = 100 * np.sum(np.array(train_pred) == np.array(train_gt)) / len(train_gt)
-        epoch_acc_validation = 100 * np.sum(np.array(val_pred) == np.array(val_gt)) / len(val_gt)
+        epoch_acc_validation = 100 * np.mean(np.array(val_pred) == np.array(val_gt))
 
         # Print training and validation info
         print(f"Epoch {epoch+1}/{epochs}")
@@ -208,7 +209,7 @@ def main():
                 model.load_state_dict(best_model)
                 model.eval()
                 with torch.no_grad():
-                    for i, batch in enumerate(test_loader):
+                    for i, batch in enumerate(tqdm(test_loader, desc="Testing", ncols=100)):
                         x_test, y_test = batch
                         x_test = x_test.to(device)
                         y_test = y_test.to(device)
