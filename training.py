@@ -13,6 +13,7 @@ from copy import deepcopy
 from sklearn.metrics import confusion_matrix
 import seaborn as sns
 from tqdm import tqdm  
+import time # only for debugging
 
 
 def main():
@@ -42,7 +43,7 @@ def main():
     pooling_2_stride = 2
     # Output size: b_size x 32 x 53 x 4
 
-    classifier_input_features = 64
+    classifier_input_features = 229
     classifier_output = 4
     
     # Instantiate our DNN
@@ -65,27 +66,13 @@ def main():
     model = model.to(device)
 
     # Load data
-    data_path = '/mnt/d/maestro-v3.0.0'
-    
-    ds_train = MyDataset(
-        data_path,
-        data_path + '/maestro-v3.0.0.csv',
-        'train'
-    )
-    ds_val = MyDataset(
-        data_path,
-        data_path + '/maestro-v3.0.0.csv',
-        'validation'
-    )
-    ds_test = MyDataset(
-        data_path,
-        data_path + '/maestro-v3.0.0.csv',
-        'test'
-    )
+    ds_train = MyDataset('train')
+    ds_val = MyDataset('validation')
+    ds_test = MyDataset('test')
 
-    train_loader = DataLoader(ds_train, batch_size=batch_size, shuffle=True, num_workers=4)
-    val_loader = DataLoader(ds_val, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(ds_test, batch_size=batch_size)
+    train_loader = DataLoader(ds_train, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
+    val_loader = DataLoader(ds_val, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
+    test_loader = DataLoader(ds_test, batch_size=batch_size, num_workers=4, pin_memory=True)
             
     
     loss_function = nn.BCEWithLogitsLoss()
@@ -111,39 +98,76 @@ def main():
         val_pred = []
         val_gt = []
 
+        # before_loop = time.time()
+
         # Training loop with tqdm
         for i, batch in enumerate(tqdm(train_loader, desc=f"Training Epoch {epoch+1}/{epochs}", ncols=100)):
+            # start_zero = time.time()
+            
             # Zero the gradient of the optimizer.
-            optimizer.zero_grad()
+            # optimizer.zero_grad()
+
+            # start_batch = time.time()
 
             # Get the batches.
             x, y = batch
+
+            # get_batch = time.time()
 
             # Give them to the appropriate device.
             x = x.to(device)
             y = y.to(device)
 
+            # to_device = time.time()
+
             # Flatten the target to match the shape of the model's output.
             y = y.view(1, -1)
 
+            # flatten = time.time()
+
             # Get the predictions of our model.
             y_hat = model(x).squeeze(1)
+
+            # predicted = time.time()
             
             # Flatten the model output
             y_hat = y_hat.view(batch_size, -1)
 
+            # flatten2 = time.time()
+
             # Calculate the loss of our model.
             loss = loss_function(y_hat, y)
+
+            # get_loss = time.time()
 
             # Do the backward pass
             loss.backward()
 
+            # back = time.time()
+
             # Do an update of the weights (i.e. a step of the optimizer)
             optimizer.step()
+
+            # step = time.time()
 
             # Collect predictions and ground truths for accuracy calculation
             train_pred.extend(torch.argmax(y_hat, dim=1).cpu().numpy())
             train_gt.extend(torch.argmax(y, dim=1).cpu().numpy())
+
+            # collect = time.time()
+
+            # print('Time to get batch from data loader', start_batch-before_loop)
+            # print('Time to zero grad', start_batch-start_zero)
+            # print('Time to get batch', get_batch-start_batch)
+            # print('Time to put vars on device', to_device-get_batch)
+            # print('Time to flatten gt', flatten-to_device)
+            # print('Time to compute prediction', predicted-flatten)
+            # print('Time to flatten output', flatten2-predicted)
+            # print('Time to compute loss (', loss.item(), ')', get_loss-flatten2)
+            # print('Time to backward pass', back-get_loss)
+            # print('Time to optimizer step', step-back)
+            # print('Time to collect vals for accuracy', collect-step)
+            # print('Total time', collect-before_loop)
             
             epoch_loss_training.append(loss.item())
 
@@ -205,8 +229,10 @@ def main():
                 pred = []
                 gt = []
 
-                # Load best model
+                # Save and load the best model.
+                torch.save(best_model, 'best_model_hrtf.pt')
                 model.load_state_dict(best_model)
+
                 model.eval()
                 with torch.no_grad():
                     for i, batch in enumerate(tqdm(test_loader, desc="Testing", ncols=100)):

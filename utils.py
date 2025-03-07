@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from typing import List, Union
+from typing import List, Union, MutableMapping
 import os
 import pathlib
 from pathlib import Path
@@ -12,6 +12,7 @@ from librosa.core import load as lb_load, stft
 from librosa.filters import mel
 from typing import MutableSequence
 from typing import Optional
+import pickle
 
 
 __docformat__ = 'reStructuredText'
@@ -23,6 +24,17 @@ __all__ = [ 'create_one_hot_encoding',
             'plot_confusion_matrix',
            ]
 
+def serialize_features_and_metadata(file: str, features_and_classes: MutableMapping[str, Union[np.ndarray, int]])\
+        -> None:
+    """Serializes the features and classes.
+
+    :param file: File to dump the serialized features
+    :type file: str
+    :param features_and_classes: Features and classes.
+    :type features_and_classes: dict[str, numpy.ndarray|int]
+    """
+    with open(file, 'wb') as pkl_file:
+        pickle.dump(features_and_classes, pkl_file)
 
 def create_one_hot_encoding(word: str,
                             unique_words: MutableSequence[str]) \
@@ -42,7 +54,7 @@ def create_one_hot_encoding(word: str,
     return to_return
 
 
-def get_audio_file_data(audio_file: str) \
+def get_audio_file_data(audio_file: str, sr=None) \
         -> np.ndarray:
     """Loads and returns the audio data from the `audio_file`.
 
@@ -51,7 +63,7 @@ def get_audio_file_data(audio_file: str) \
     :return: Data of the `audio_file` audio file.
     :rtype: numpy.ndarray
     """
-    return lb_load(path=audio_file, sr=None, mono=True)
+    return lb_load(path=audio_file, sr=sr, mono=True)
 
 
 
