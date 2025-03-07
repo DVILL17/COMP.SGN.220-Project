@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -13,18 +12,17 @@ from copy import deepcopy
 from sklearn.metrics import confusion_matrix
 import seaborn as sns
 from tqdm import tqdm  
-import time # only for debugging
-
 
 def main():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f'Process on {device}', end='\n\n')
 
-    # Define hyper-parameters to be used.
+    # Define hyper-parameters
     batch_size = 1
     epochs = 30
     learning_rate = 1e-4
 
+    # CNN and classifier parameters
     cnn_1_channels = 16
     cnn_1_kernel = 5
     cnn_1_stride = 2
@@ -32,7 +30,6 @@ def main():
 
     pooling_1_kernel = 3
     pooling_1_stride = 1
-    # Output size: b_size x 16 x 214 x 18
 
     cnn_2_channels = 32
     cnn_2_kernel = 5
@@ -41,12 +38,11 @@ def main():
 
     pooling_2_kernel = 3
     pooling_2_stride = 2
-    # Output size: b_size x 32 x 53 x 4
 
     classifier_input_features = 229
-    classifier_output = 4
-    
-    # Instantiate our DNN
+    classifier_output = 4  # Number of output classes
+
+    # Instantiate model
     model = MyCNNSystem(
         cnn_1_channels,
         (cnn_1_kernel, cnn_1_kernel),
@@ -65,7 +61,7 @@ def main():
     )
     model = model.to(device)
 
-    # Load data
+    # Load dataset
     ds_train = MyDataset('train')
     ds_val = MyDataset('validation')
     ds_test = MyDataset('test')
@@ -73,18 +69,17 @@ def main():
     train_loader = DataLoader(ds_train, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
     val_loader = DataLoader(ds_val, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
     test_loader = DataLoader(ds_test, batch_size=batch_size, num_workers=4, pin_memory=True)
-            
-    
-    loss_function = nn.BCEWithLogitsLoss()
+
+    # Define loss and optimizer
+    loss_function = nn.BCEWithLogitsLoss()  # No need for sigmoid in model
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-    # Variables for the early stopping
-    lowest_validation_loss = 1e10
+    # Early stopping
+    lowest_validation_loss = float('inf')
     best_validation_epoch = 0
     patience = 10
     patience_counter = 0
 
-    val_losses, test_losses, test_accs = [], [], []
     best_model = None
     for epoch in range(epochs):
         epoch_loss_training = []
@@ -98,189 +93,133 @@ def main():
         val_pred = []
         val_gt = []
 
-        # before_loop = time.time()
-
-        # Training loop with tqdm
-        for i, batch in enumerate(tqdm(train_loader, desc=f"Training Epoch {epoch+1}/{epochs}", ncols=100)):
-            # start_zero = time.time()
-            
-            # Zero the gradient of the optimizer.
-            # optimizer.zero_grad()
-
-            # start_batch = time.time()
-
-            # Get the batches.
+        # Training loop
+        for batch in tqdm(train_loader, desc=f"Training Epoch {epoch+1}/{epochs}", ncols=100):
             x, y = batch
+            x, y = x.to(device), y.to(device)
 
-            # get_batch = time.time()
+            # Flatten target to match output shape
+            y = y.view(batch_size, -1)
 
-            # Give them to the appropriate device.
-            x = x.to(device)
-            y = y.to(device)
-
-            # to_device = time.time()
-
-            # Flatten the target to match the shape of the model's output.
-            y = y.view(1, -1)
-
-            # flatten = time.time()
-
-            # Get the predictions of our model.
+            # Forward pass
             y_hat = model(x).squeeze(1)
 
-            # predicted = time.time()
-            
-            # Flatten the model output
-            y_hat = y_hat.view(batch_size, -1)
-
-            # flatten2 = time.time()
-
-            # Calculate the loss of our model.
+            # Compute loss
             loss = loss_function(y_hat, y)
 
-            # get_loss = time.time()
-
-            # Do the backward pass
+            # Backpropagation
             loss.backward()
-
-            # back = time.time()
-
-            # Do an update of the weights (i.e. a step of the optimizer)
             optimizer.step()
+            optimizer.zero_grad()
 
-            # step = time.time()
+            # Apply sigmoid and threshold to get binary predictions
+            y_pred_prob = torch.sigmoid(y_hat)
+            y_pred_binary = (y_pred_prob > 0.5).float()
 
-            # Collect predictions and ground truths for accuracy calculation
-            train_pred.extend(torch.argmax(y_hat, dim=1).cpu().numpy())
-            train_gt.extend(torch.argmax(y, dim=1).cpu().numpy())
+            # Collect predictions and labels
+            train_pred.extend(y_pred_binary.cpu().numpy().flatten())
+            train_gt.extend(y.cpu().numpy().flatten())
 
-            # collect = time.time()
-
-            # print('Time to get batch from data loader', start_batch-before_loop)
-            # print('Time to zero grad', start_batch-start_zero)
-            # print('Time to get batch', get_batch-start_batch)
-            # print('Time to put vars on device', to_device-get_batch)
-            # print('Time to flatten gt', flatten-to_device)
-            # print('Time to compute prediction', predicted-flatten)
-            # print('Time to flatten output', flatten2-predicted)
-            # print('Time to compute loss (', loss.item(), ')', get_loss-flatten2)
-            # print('Time to backward pass', back-get_loss)
-            # print('Time to optimizer step', step-back)
-            # print('Time to collect vals for accuracy', collect-step)
-            # print('Total time', collect-before_loop)
-            
             epoch_loss_training.append(loss.item())
 
         model.eval()
         with torch.no_grad():
-            # Validation loop with tqdm
-            for i, batch in enumerate(tqdm(val_loader, desc=f"Validating Epoch {epoch+1}/{epochs}", ncols=100)):
-                # Get the batch
+            # Validation loop
+            for batch in tqdm(val_loader, desc=f"Validating Epoch {epoch+1}/{epochs}", ncols=100):
                 x_val, y_val = batch
-                # Pass the data to the appropriate device.
-                x_val = x_val.to(device)
-                y_val = y_val.to(device)
-                val_gt.extend(torch.argmax(y_val, dim=1).cpu().numpy())
+                x_val, y_val = x_val.to(device), y_val.to(device)
 
-                # Get the predictions of the model.
+                # Flatten target
+                y_val = y_val.view(batch_size, -1)
+
+                # Get model predictions
                 y_hat = model(x_val).squeeze(1)
-                val_pred.extend(torch.argmax(y_hat, dim=1).cpu().numpy())
 
-                # Flatten the target to match the shape of the model's output.
-                y_val = y_val.view(1, -1)
-
-                # Calculate the loss.
+                # Compute loss
                 loss = loss_function(y_hat, y_val)
-
-                # Log the validation loss.
                 epoch_loss_validation.append(loss.item())
-                val_losses.append(loss.item())
 
-        # Calculate mean losses and accuracy.
+                # Apply sigmoid and threshold
+                y_pred_prob = torch.sigmoid(y_hat)
+                y_pred_binary = (y_pred_prob > 0.5).float()
+
+                # Collect predictions and labels
+                val_pred.extend(y_pred_binary.cpu().numpy().flatten())
+                val_gt.extend(y_val.cpu().numpy().flatten())
+
+        # Compute average loss and accuracy
         epoch_loss_training = np.mean(epoch_loss_training)
         epoch_loss_validation = np.mean(epoch_loss_validation)
-        epoch_acc_training = 100 * np.sum(np.array(train_pred) == np.array(train_gt)) / len(train_gt)
+        epoch_acc_training = 100 * np.mean(np.array(train_pred) == np.array(train_gt))
         epoch_acc_validation = 100 * np.mean(np.array(val_pred) == np.array(val_gt))
 
-        # Print training and validation info
         print(f"Epoch {epoch+1}/{epochs}")
         print(f"Training loss: {epoch_loss_training:.4f} | Training accuracy: {epoch_acc_training:.2f}%")
         print(f"Validation loss: {epoch_loss_validation:.4f} | Validation accuracy: {epoch_acc_validation:.2f}%")
 
-        # Early stopping conditions
+        # Early stopping logic
         if epoch_loss_validation < lowest_validation_loss:
             lowest_validation_loss = epoch_loss_validation
-            patience_counter = 0
+            patience_counter = 0  # Reset the patience counter since validation loss improved
             best_model = deepcopy(model.state_dict())
             best_validation_epoch = epoch
         else:
-            patience_counter += 1
+            patience_counter += 1  # Increment patience counter because the validation loss didn't improve
 
-        # If we have to stop, do the testing.
-        if patience_counter >= patience or epoch == epochs - 1:
-            print('\nExiting training', end='\n\n')
-            print(f'Best epoch {best_validation_epoch+1} with loss {lowest_validation_loss:.4f}', end='\n\n')
-            if best_model is None:
-                print('No best model.')
-            else:
-                print('Starting testing', end=' | ')
-                testing_loss = []
-                testing_acc = 0
-                pred = []
-                gt = []
-
-                # Save and load the best model.
-                torch.save(best_model, 'best_model_hrtf.pt')
+        # If the patience limit is exceeded, stop training
+        if patience_counter >= patience:
+            print(f"\nStopping early at epoch {epoch+1} with best loss {lowest_validation_loss:.4f}\n")
+            if best_model:
+                print("Loading best model for testing...")
+                torch.save(best_model, 'best_model.pt')
                 model.load_state_dict(best_model)
 
+                # Testing phase
                 model.eval()
+                test_losses = []
+                test_acc = []
+                gt, pred = [], []
+
                 with torch.no_grad():
-                    for i, batch in enumerate(tqdm(test_loader, desc="Testing", ncols=100)):
+                    for batch in tqdm(test_loader, desc="Testing", ncols=100):
                         x_test, y_test = batch
-                        x_test = x_test.to(device)
-                        y_test = y_test.to(device)
-                        gt_batch = torch.argmax(y_test, dim=1).cpu().numpy()
-                        gt.extend(gt_batch)
+                        x_test, y_test = x_test.to(device), y_test.to(device)
 
+                        # Flatten target to match the output shape
+                        y_test = y_test.view(batch_size, -1)
+
+                        # Get predictions
                         y_hat = model(x_test).squeeze(1)
-                        pred_batch = torch.argmax(y_hat, dim=1).cpu().numpy()
-                        pred.extend(pred_batch)
 
-                        # Flatten the target to match the shape of the model's output.
-                        y_test = y_test.view(1, -1)
-
+                        # Compute loss
                         loss = loss_function(y_hat, y_test)
-
-                        testing_loss.append(loss.item())
                         test_losses.append(loss.item())
 
-                        # get test accuracy for batch and save
-                        testing_acc_batch = np.sum(np.array(pred_batch) == np.array(gt_batch)) / len(gt_batch)
-                        testing_acc += testing_acc_batch
+                        # Apply sigmoid and threshold for binary classification
+                        y_pred_prob = torch.sigmoid(y_hat)
+                        y_pred_binary = (y_pred_prob > 0.5).float()
 
-                testing_acc = 100 * testing_acc / len(test_loader)
-                testing_loss = np.mean(testing_loss)
-                print(f'Testing loss: {testing_loss:7.4f} | Testing accuracy: {testing_acc:.2f}%')
+                        # Collect predictions and ground truths
+                        pred.extend(y_pred_binary.cpu().numpy().flatten())
+                        gt.extend(y_test.cpu().numpy().flatten())
 
-                # Show confusion matrix
+                # Compute testing accuracy and loss
+                testing_acc = 100 * np.mean(np.array(pred) == np.array(gt))
+                testing_loss = np.mean(test_losses)
+                print(f"Testing loss: {testing_loss:.4f} | Testing accuracy: {testing_acc:.2f}%")
+
+                # Confusion matrix
                 cm = confusion_matrix(gt, pred)
                 plt.figure(figsize=(8, 6))
-                sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=ds_test.labels, yticklabels=ds_test.labels)
-                plt.xlabel("Predicted Label")
-                plt.ylabel("True Label")
-                plt.title("Confusion Matrix on Test Data")
+                sns.heatmap(cm, annot=True, fmt="d", cmap="Blues")
+                plt.xlabel("Predicted")
+                plt.ylabel("True")
+                plt.title("Confusion Matrix")
                 plt.show()
-                break
 
-
-    print(f'Validation losses: {val_losses}')
-    print(f'Testing losses: {test_losses}')
-    print(f'Testing accuracies: {test_accs}')
-
-    print(f'Validation losses mean: {np.mean(val_losses):7.4f}')
-    print(f'Testing losses mean: {np.mean(test_losses):7.4f}')
-    print(f'Testing accuracies mean: {np.mean(test_accs):7.4f}', end='\n\n')
-
+            # Exit the loop after early stopping
+            break
 
 if __name__ == '__main__':
     main()
+    
