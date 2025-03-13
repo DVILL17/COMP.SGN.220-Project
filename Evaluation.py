@@ -121,7 +121,7 @@ if __name__ == '__main__':
         classifier_input_features=229,
         output_classes=1  # Binary classification
     )
-    model.load_state_dict(torch.load('best_model.pt', map_location=device, weights_only=True))
+    model.load_state_dict(torch.load('best_model.pt', map_location=device))
     model = model.to(device)
 
     # Load test dataset
