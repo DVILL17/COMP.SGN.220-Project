@@ -103,6 +103,10 @@ class MyCNNSystem(Module):
         :return: Output predictions.
         :rtype: torch.Tensor
         """
+        # Ensure input is 4D: [batch_size, channels, height, width]
+        if x.ndimension() == 3:
+            x = x.unsqueeze(1)  # Add a channel dimension
+            
         h = x if x.ndimension() == 4 else x.unsqueeze(1)
 
         # apply block_1 to h
